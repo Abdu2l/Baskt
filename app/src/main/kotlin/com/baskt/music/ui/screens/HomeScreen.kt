@@ -414,6 +414,27 @@ private fun HomeContent(
                                 modifier = Modifier.animateItem(),
                             )
                         }
+                    } else if (
+                        uiState.quickPicksMode == QuickPicks.LAST_LISTEN &&
+                            uiState.quickPicks.isEmpty()
+                    ) {
+                        item(
+                            key = "home_quick_picks_header",
+                            contentType = "section_header",
+                        ) {
+                            HomeSectionHeader(
+                                title = stringResource(R.string.quick_picks),
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                        item(
+                            key = "home_quick_picks_empty",
+                            contentType = "quick_picks",
+                        ) {
+                            QuickPicksEmptyCard(
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
                     }
 
                     uiState.communitySection?.takeIf { section -> section.featuredCards.isNotEmpty() }?.let { section ->

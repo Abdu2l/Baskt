@@ -264,6 +264,41 @@ fun HomeSectionHeader(
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun QuickPicksEmptyCard(modifier: Modifier = Modifier) {
+    androidx.compose.material3.Card(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.quick_picks_empty_title),
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.quick_picks_empty_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3ExpressiveApi::class,

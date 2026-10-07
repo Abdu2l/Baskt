@@ -422,17 +422,23 @@ class AboutViewModel
                 // TODO: replace placeholder owner/repo with your GitHub once published.
                 leadDeveloper =
                     TeamMember(
-                        avatarUrl = "",
-                        name = "Baskt",
+                        avatarUrl = "https://github.com/Abdu2l.png",
+                        name = "Abdu2l",
                         positionResId = R.string.about_position_lead_dev,
-                        profileUrl = "https://github.com/Abdu2l/Baskt",
+                        profileUrl = "https://github.com/Abdu2l",
                         links =
                             AboutLinkCollection.of(
                                 AboutLinkUiModel(
                                     id = "github",
                                     iconResId = R.drawable.github,
                                     labelResId = R.string.about_content_desc_github,
-                                    url = "https://github.com/Abdu2l/Baskt",
+                                    url = "https://github.com/Abdu2l",
+                                ),
+                                AboutLinkUiModel(
+                                    id = "instagram",
+                                    iconResId = R.drawable.instagram,
+                                    labelResId = R.string.about_content_desc_instagram,
+                                    url = "https://instagram.com/khhezer",
                                 ),
                             ),
                     ),

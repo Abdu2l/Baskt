@@ -223,7 +223,9 @@ class HomeViewModel
         private val quickPicksMode =
             context.dataStore.data
                 .map {
-                    it[QuickPicksKey].toEnum(QuickPicks.QUICK_PICKS)
+                    // Default to history-based picks: no region-flavored suggestions
+                    // until the user explicitly picks remote quick picks in settings.
+                    it[QuickPicksKey].toEnum(QuickPicks.LAST_LISTEN)
                 }.distinctUntilChanged()
 
         private val quickPicks = MutableStateFlow<List<Song>?>(null)

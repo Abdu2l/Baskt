@@ -378,6 +378,8 @@
     <string name="arrange_library_chips">Arrange library chips</string>
     <string name="arrange_library_chips_desc">Choose the order of tabs shown in your library</string>
     <string name="set_quick_picks">Set quick picks</string>
+    <string name="quick_picks_empty_title">Play something to get suggestions</string>
+    <string name="quick_picks_empty_desc">Recommendations show up here based on what you listen to.</string>
     <string name="last_song_listened">Based on last song listened</string>
     <string name="dont_show">Dont Show</string>
     <string name="app_language">App language</string>
@@ -713,6 +715,7 @@
     <string name="about_position_mo_agamy">Base Framework | Metrolist</string>
     <string name="about_position_zion_huang">Creator of InnerTune · Foundation for Metrolist, Baskt, and other forks</string>
     <string name="about_content_desc_github">GitHub</string>
+    <string name="about_content_desc_instagram">Instagram</string>
     <string name="about_content_desc_website">Website</string>
     <string name="about_content_desc_discord">Discord</string>
     <string name="about_content_desc_telegram">Telegram</string>
