@@ -1,0 +1,56 @@
+name: Slim APK release
+
+# Builds the slim APK (FOSS, no Google services, arm64 only, debug-signed so no
+# keystore secrets are needed) and attaches it to a GitHub Release.
+# Trigger: push a tag like v1.0.0, or run manually from the Actions tab.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-slim:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set Up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-cleanup: on-success
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build slim APK (fossMobileArm64Debug)
+        run: ./gradlew :app:assembleFossMobileArm64Debug --console=plain
+
+      - name: Rename APK
+        id: rename
+        run: |
+          set -euo pipefail
+          SRC=$(find app/build/outputs/apk/fossMobileArm64/debug -name '*.apk' | head -n 1)
+          TAG="${GITHUB_REF_NAME:-manual}"
+          OUT="Baskt-${TAG}-arm64.apk"
+          cp "$SRC" "$OUT"
+          echo "apk=$OUT" >> "$GITHUB_OUTPUT"
+          ls -la "$OUT"
+
+      - name: Attach APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.rename.outputs.apk }}
+          generate_release_notes: true

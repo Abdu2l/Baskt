@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Baskt (2026)
+  ~ © Baskt — github.com/Abdu2l
+  ~ GPL-3.0 License | Contributors: see git history
+  ~ Do not remove or alter this notice. - Per GPL-3.0 Section 4 & Section 5
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>
