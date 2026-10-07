@@ -13,6 +13,11 @@ import android.content.res.Configuration
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -63,6 +68,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -100,6 +106,7 @@ import com.baskt.music.LocalDatabase
 import com.baskt.music.LocalPlayerConnection
 import com.baskt.music.R
 import com.baskt.music.constants.BlurRadiusKey
+import com.baskt.music.playback.VisualizerState
 import com.baskt.music.constants.DisableBlurKey
 import com.baskt.music.constants.EnableHapticFeedbackKey
 import com.baskt.music.constants.LyricsBackgroundStyle
@@ -261,7 +268,10 @@ fun LyricsScreen(
     val fallbackColor = remember { Color.Black.toArgb() }
 
     LaunchedEffect(mediaMetadata.id, mediaMetadata.thumbnailUrl, lyricsBackground) {
-        if (lyricsBackground != LyricsBackgroundStyle.DEFAULT && lyricsBackground != LyricsBackgroundStyle.COLORING) {
+        if (lyricsBackground != LyricsBackgroundStyle.DEFAULT &&
+            lyricsBackground != LyricsBackgroundStyle.COLORING &&
+            lyricsBackground != LyricsBackgroundStyle.VISUALIZER
+        ) {
             gradientColors = AppleMusicFallbackGradient
             return@LaunchedEffect
         }
@@ -362,6 +372,7 @@ fun LyricsScreen(
             playerCustomBlur = playerCustomBlur,
             playerCustomContrast = playerCustomContrast,
             playerCustomBrightness = playerCustomBrightness,
+            isPlaying = isPlaying,
         )
 
         Box(
@@ -516,6 +527,7 @@ private fun LyricsScreenBackground(
     playerCustomBlur: Float,
     playerCustomContrast: Float,
     playerCustomBrightness: Float,
+    isPlaying: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -539,6 +551,14 @@ private fun LyricsScreenBackground(
             }
 
             LyricsBackgroundStyle.FOLLOW_THEME -> Unit
+
+            LyricsBackgroundStyle.VISUALIZER -> {
+                VisualizerBackground(
+                    artworkUrl = mediaMetadata.thumbnailUrl,
+                    gradientColors = gradientColors,
+                    isPlaying = isPlaying,
+                )
+            }
 
             LyricsBackgroundStyle.COLORING,
             LyricsBackgroundStyle.CUSTOM,
@@ -632,6 +652,126 @@ private fun AppleMusicBackground(
                 Modifier
                     .fillMaxSize()
                     .background(bottomScrim),
+        )
+    }
+}
+
+@Composable
+private fun VisualizerBackground(
+    artworkUrl: String?,
+    gradientColors: List<Color>,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val magnitudes by VisualizerState.magnitudes.collectAsStateWithLifecycle()
+    val energy by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = tween(900),
+        label = "visualizer-energy",
+    )
+    val bass =
+        remember(magnitudes, energy) {
+            val raw = (magnitudes.getOrElse(0) { 0.15f } + magnitudes.getOrElse(1) { 0.15f }) / 2f
+            0.15f + (raw - 0.15f) * energy
+        }
+    // Two huge gradient washes rotating against each other over ~35s, like
+    // Apple's flowing backdrop. Audio only breathes their intensity.
+    val spin = rememberInfiniteTransition(label = "visualizer-spin")
+    val angleA by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(35000, easing = LinearEasing)), label = "spinA")
+    val angleB by spin.animateFloat(360f, 0f, infiniteRepeatable(tween(45000, easing = LinearEasing)), label = "spinB")
+
+    val palette = remember(gradientColors) {
+        if (gradientColors.size >= 3) {
+            gradientColors.take(3)
+        } else {
+            AppleMusicFallbackGradient
+        }
+    }
+    val washA =
+        remember(palette) {
+            Brush.linearGradient(
+                listOf(
+                    palette.getOrElse(0) { AppleMusicFallbackGradient[0] },
+                    palette.getOrElse(1) { AppleMusicFallbackGradient[1] },
+                ),
+            )
+        }
+    val washB =
+        remember(palette) {
+            Brush.linearGradient(
+                listOf(
+                    palette.getOrElse(2) { AppleMusicFallbackGradient[2] },
+                    palette.getOrElse(0) { AppleMusicFallbackGradient[0] },
+                ),
+            )
+        }
+    val scrim =
+        remember {
+            Brush.verticalGradient(
+                listOf(
+                    Color.Black.copy(alpha = 0.45f),
+                    Color.Transparent,
+                    Color.Transparent,
+                    Color.Black.copy(alpha = 0.55f),
+                ),
+            )
+        }
+
+    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        // Blurred artwork base, gently larger than the screen.
+        AsyncImage(
+            model = artworkUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.25f
+                        scaleY = 1.25f
+                    }
+                    .blur(46.dp)
+                    .alpha(0.62f),
+        )
+        // Wash A sweeps one way...
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.9f
+                        scaleY = 1.9f
+                        rotationZ = angleA
+                    }
+                    .blur(70.dp)
+                    .alpha(0.50f + 0.14f * bass)
+                    .background(washA),
+        )
+        // ...wash B sweeps back the other way.
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.9f
+                        scaleY = 1.9f
+                        rotationZ = angleB
+                    }
+                    .blur(70.dp)
+                    .alpha(0.42f + 0.12f * bass)
+                    .background(washB),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f)),
+        )
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(scrim),
         )
     }
 }

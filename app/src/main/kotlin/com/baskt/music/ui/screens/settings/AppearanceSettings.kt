@@ -358,6 +358,7 @@ fun AppearanceSettings(navController: NavController) {
         remember {
             listOf(
                 LyricsBackgroundStyle.DEFAULT,
+                LyricsBackgroundStyle.VISUALIZER,
                 LyricsBackgroundStyle.FOLLOW_THEME,
                 LyricsBackgroundStyle.COLORING,
             )
@@ -819,6 +820,7 @@ fun AppearanceSettings(navController: NavController) {
                         valueText = {
                             when (it) {
                                 LyricsBackgroundStyle.DEFAULT -> stringResource(R.string.lyrics_background_default)
+                                LyricsBackgroundStyle.VISUALIZER -> stringResource(R.string.lyrics_background_visualizer)
                                 LyricsBackgroundStyle.FOLLOW_THEME -> stringResource(R.string.follow_theme)
                                 LyricsBackgroundStyle.COLORING -> stringResource(R.string.coloring)
                                 LyricsBackgroundStyle.CUSTOM -> stringResource(R.string.custom)

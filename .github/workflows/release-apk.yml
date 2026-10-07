@@ -35,14 +35,22 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build slim APK (fossMobileArm64Debug)
-        run: ./gradlew :app:assembleFossMobileArm64Debug --console=plain
+      - name: Build slim APK (fossMobileArm64Release, debug-signed)
+        run: |
+          # Generate the debug keystore first, then sign the minified/shrunk
+          # release variant with it so no keystore secrets are needed.
+          ./gradlew :app:assembleFossMobileArm64Debug --console=plain
+          ./gradlew :app:assembleFossMobileArm64Release --console=plain \
+            "-Pandroid.injected.signing.store.file=$HOME/.android/debug.keystore" \
+            -Pandroid.injected.signing.store.password=android \
+            -Pandroid.injected.signing.key.alias=androiddebugkey \
+            -Pandroid.injected.signing.key.password=android
 
       - name: Rename APK
         id: rename
         run: |
           set -euo pipefail
-          SRC=$(find app/build/outputs/apk/fossMobileArm64/debug -name '*.apk' | head -n 1)
+          SRC=$(find app/build/outputs/apk/fossMobileArm64/release -name '*.apk' | head -n 1)
           TAG="${GITHUB_REF_NAME:-manual}"
           OUT="Baskt-${TAG}-arm64.apk"
           cp "$SRC" "$OUT"

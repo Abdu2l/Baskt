@@ -10,6 +10,7 @@ package com.baskt.music
 import android.app.Application
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import com.baskt.music.utils.dataStore
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,6 @@ import kotlinx.coroutines.launch
 import leakcanary.AppWatcher
 import leakcanary.LeakCanary
 import leakcanary.ReachabilityWatcher
-import com.baskt.music.utils.dataStore
 
 internal object LeakCanaryVariant {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)

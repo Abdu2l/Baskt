@@ -7944,6 +7944,8 @@ class MusicService :
                             150.toShort(),
                         ),
                         SonicAudioProcessor(),
+                        // Transparent FFT tap for the lyrics visualizer.
+                        FftAudioProcessor(),
                     ),
                 ).build()
         }
