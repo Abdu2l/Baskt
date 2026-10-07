@@ -690,6 +690,15 @@ private fun AboutSuccessContent(
             }
         }
 
+        item(key = "inspiration", contentType = "about_inspiration") {
+            AboutContentContainer {
+                AboutInspirationCard(
+                    onOpenUri = onOpenUri,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
+
         item(key = "project_information", contentType = "about_actions") {
             AboutContentContainer {
                 AboutProjectInformationSection(
@@ -829,6 +838,75 @@ private fun AboutIdentityCard(
                         links = model.primaryLinks,
                         onOpenUri = onOpenUri,
                         horizontalArrangement = Arrangement.spacedBy(AboutSpacing.xs, Alignment.CenterHorizontally),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AboutInspirationCard(
+    onOpenUri: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val projects =
+        remember {
+            listOf(
+                "ArchiveTune" to "https://github.com/rukamori/ArchiveTune",
+                "Metrolist" to "https://github.com/mostafaalagamy/Metrolist",
+                "InnerTune" to "https://github.com/z-huang/InnerTune",
+            )
+        }
+    Card(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(AboutSpacing.md),
+            verticalArrangement = Arrangement.spacedBy(AboutSpacing.sm),
+        ) {
+            Text(
+                text = stringResource(R.string.about_inspiration_title),
+                style = MaterialTheme.typography.titleMediumEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.about_inspiration_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(AboutSpacing.xs),
+                verticalArrangement = Arrangement.spacedBy(AboutSpacing.xs),
+            ) {
+                projects.forEach { (name, url) ->
+                    AssistChip(
+                        onClick = { onOpenUri(url) },
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.github),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        },
                     )
                 }
             }

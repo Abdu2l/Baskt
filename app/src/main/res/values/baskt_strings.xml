@@ -698,6 +698,8 @@
     <string name="ai_translation_menu">AI Translation</string>
     <string name="about_lead_developer">Lead Developer</string>
     <string name="about_baskt_team">Team</string>
+    <string name="about_inspiration_title">Inspired by open source</string>
+    <string name="about_inspiration_body">Baskt takes inspiration from ArchiveTune, which builds on Metrolist and InnerTune. Thanks to their authors, contributors, translators, and testers.</string>
     <string name="about_respecter">Respecter</string>
     <string name="about_contributors">Contributors</string>
     <string name="about_translation_contributors_error">Couldn’t load translation credits.</string>

@@ -4,12 +4,15 @@ A modern music player for Android with local file and YouTube Music support —
 Material 3 design, dynamic album-art colors, many player styles, live synced
 lyrics, and deep customization.
 
-> TODO: set your GitHub owner/repo in `local.properties`
-> (`GITHUB_OWNER`, `GITHUB_REPO`) and update the links below.
-
 - Source: https://github.com/Abdu2l/Baskt
 - Issues: https://github.com/Abdu2l/Baskt/issues
 - Privacy: see [PRIVACY.md](PRIVACY.md)
+
+## Download
+
+Get the slim APK (FOSS, arm64) from
+[GitHub Releases](https://github.com/Abdu2l/Baskt/releases).
+New APKs are published automatically for every `v*` tag.
 
 ## Features
 
@@ -29,16 +32,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions.
 ```sh
 git clone https://github.com/Abdu2l/Baskt.git
 cd Baskt
-git submodule update --init --depth 1
 ```
-
-## Acknowledgments
-
-Baskt is a hard fork of
-[ArchiveTune](https://github.com/rukamori/ArchiveTune) (which builds on
-[Metrolist](https://github.com/mostafaalagamy/Metrolist) and
-[InnerTune](https://github.com/z-huang/InnerTune)).
-Thanks to their authors and contributors, translators, and beta testers.
 
 ## Legal
 
