@@ -92,8 +92,9 @@ fun ContentSettings(
         )
     val (hideExplicit, onHideExplicitChange) = rememberPreference(key = HideExplicitKey, defaultValue = false)
     val (hideVideo, onHideVideoChange) = rememberPreference(key = HideVideoKey, defaultValue = false)
+    val (showCommunity, onShowCommunityChange) = rememberPreference(key = ShowCommunityKey, defaultValue = false)
     val (lengthTop, onLengthTopChange) = rememberPreference(key = TopSize, defaultValue = "50")
-    val (quickPicks, onQuickPicksChange) = rememberEnumPreference(key = QuickPicksKey, defaultValue = QuickPicks.QUICK_PICKS)
+    val (quickPicks, onQuickPicksChange) = rememberEnumPreference(key = QuickPicksKey, defaultValue = QuickPicks.LAST_LISTEN)
 
     Column(
         Modifier
@@ -191,6 +192,15 @@ fun ContentSettings(
                     icon = { Icon(painterResource(R.drawable.slow_motion_video), null) },
                     checked = hideVideo,
                     onCheckedChange = onHideVideoChange,
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.show_community)) },
+                    icon = { Icon(painterResource(R.drawable.explore_outlined), null) },
+                    checked = showCommunity,
+                    onCheckedChange = onShowCommunityChange,
                 )
             }
         }

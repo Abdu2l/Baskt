@@ -209,6 +209,7 @@ val EnablePaxsenixMusixmatchLyricsKey = booleanPreferencesKey("enablePaxsenixMus
 val EnableUnisonLyricsKey = booleanPreferencesKey("enableUnisonLyrics")
 val HideExplicitKey = booleanPreferencesKey("hideExplicit")
 val HideVideoKey = booleanPreferencesKey("hideVideo")
+val ShowCommunityKey = booleanPreferencesKey("showCommunity")
 val AiContentFilterEnabledKey = booleanPreferencesKey("aiContentFilterEnabled")
 val AiContentFilterIncludeModerateKey = booleanPreferencesKey("aiContentFilterIncludeModerate")
 val AiContentFilterLastUpdatedKey = longPreferencesKey("aiContentFilterLastUpdated")
@@ -433,7 +434,7 @@ val ArtistViewTypeKey = stringPreferencesKey("artistViewType")
 val AlbumViewTypeKey = stringPreferencesKey("albumViewType")
 
 val PlaylistEditLockKey = booleanPreferencesKey("playlistEditLock")
-val QuickPicksKey = stringPreferencesKey("discover")
+val QuickPicksKey = stringPreferencesKey("quickPicksMode")
 
 val NewsLastReadTimestampKey = longPreferencesKey("news_last_read_timestamp")
 val SpeedDialSongIdsKey = stringPreferencesKey("speedDialSongIds")

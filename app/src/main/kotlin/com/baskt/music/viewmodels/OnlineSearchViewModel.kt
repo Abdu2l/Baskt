@@ -41,6 +41,7 @@ import com.baskt.music.jiosaavn.JioSaavnClient
 import com.baskt.music.jiosaavn.SaavnTrack
 import com.baskt.music.tidal.TidalClient
 import com.baskt.music.tidal.TidalTrack
+import com.baskt.music.innertube.pages.SearchSummary
 import com.baskt.music.innertube.pages.SearchSummaryPage
 import com.baskt.music.models.ItemsPage
 import com.baskt.music.ui.screens.search.OnlineSearchResultArgument
@@ -111,6 +112,24 @@ class OnlineSearchViewModel
 
             isSummaryLoading = true
             try {
+                // Non-YouTube song hits ride along on the summary page too.
+                val extraSummaries =
+                    runCatching {
+                        val saavn =
+                            jioSaavnClient.searchTracks(query, limit = 6)
+                                .map { it.toSongItem() }
+                        val tidal =
+                            tidalClient.searchTracks(query, limit = 6)
+                                .map { it.toSongItem() }
+                        buildList {
+                            if (saavn.isNotEmpty()) {
+                                add(SearchSummary(title = "JioSaavn", items = saavn))
+                            }
+                            if (tidal.isNotEmpty()) {
+                                add(SearchSummary(title = "TIDAL", items = tidal))
+                            }
+                        }
+                    }.getOrDefault(emptyList())
                 YouTube
                     .searchSummary(query)
                     .onSuccess {
@@ -126,10 +145,15 @@ class OnlineSearchViewModel
                                         summary
                                             .copy(items = filterAiContent(summary.items, aiContentFilterPolicy))
                                             .takeIf { filteredSummary -> filteredSummary.items.isNotEmpty() }
-                                    },
+                                    } + extraSummaries,
                             )
                     }.onFailure {
-                        reportException(it)
+                        if (extraSummaries.isNotEmpty()) {
+                            summaryPage =
+                                SearchSummaryPage(
+                                    summaries = extraSummaries,
+                                )
+                        }
                     }
             } finally {
                 isSummaryLoading = false

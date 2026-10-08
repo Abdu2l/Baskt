@@ -59,6 +59,8 @@ import com.baskt.music.LocalPlayerAwareWindowInsets
 import com.baskt.music.LocalPlayerConnection
 import com.baskt.music.R
 import com.baskt.music.constants.QuickPicks
+import com.baskt.music.constants.ShowCommunityKey
+import com.baskt.music.utils.rememberPreference
 import com.baskt.music.home.HomeAction
 import com.baskt.music.home.HomeEvent
 import com.baskt.music.home.HomeScreenState
@@ -296,6 +298,7 @@ private fun HomeContent(
         uiState
             .takeIf { it.quickPicksMode == QuickPicks.QUICK_PICKS }
             ?.remoteQuickPicks
+    val showCommunity by rememberPreference(ShowCommunityKey, false)
     val tonalStart = MaterialTheme.colorScheme.primaryContainer
     val tonalMiddle = MaterialTheme.colorScheme.secondaryContainer
     Box(modifier = modifier.fillMaxSize()) {
@@ -437,7 +440,8 @@ private fun HomeContent(
                         }
                     }
 
-                    uiState.communitySection?.takeIf { section -> section.featuredCards.isNotEmpty() }?.let { section ->
+                    if (showCommunity) {
+                        uiState.communitySection?.takeIf { section -> section.featuredCards.isNotEmpty() }?.let { section ->
                         sectionSpacer("community")
                         item(
                             key = "home_community_header",
@@ -473,6 +477,7 @@ private fun HomeContent(
                                 modifier = Modifier.animateItem(),
                             )
                         }
+                    }
                     }
 
                     if (uiState.speedDialItems.isNotEmpty()) {

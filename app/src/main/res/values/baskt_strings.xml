@@ -231,6 +231,7 @@
     <string name="album_cover_desc">Album cover</string>
     <string name="top_music_videos">Top music videos</string>
     <string name="trending">Trending</string>
+    <string name="show_community">Trending community content</string>
     <string name="weeks">Weeks</string>
     <string name="months">Months</string>
     <string name="years">Years</string>
