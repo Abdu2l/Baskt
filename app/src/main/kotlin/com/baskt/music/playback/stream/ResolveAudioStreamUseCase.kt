@@ -19,6 +19,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.guava.future
+import com.baskt.music.jiosaavn.JioSaavnClient
+import com.baskt.music.morideobfuscator.youtubei.YoutubeiException
 import com.baskt.music.utils.YTPlayerUtils
 import timber.log.Timber
 import java.io.InterruptedIOException
@@ -33,6 +35,7 @@ class ResolveAudioStreamUseCase
     @Inject
     constructor(
         private val youtubeiRepository: YoutubeiStreamRepository,
+        private val jioSaavnClient: JioSaavnClient,
     ) {
         private data class CacheKey(
             val mediaId: String,
@@ -324,10 +327,40 @@ class ResolveAudioStreamUseCase
                 } else {
                     request.authState
                 }
-            return youtubeiRepository.resolve(
-                request = request.copy(authState = resolvedAuthState),
-                priority = priority,
-            )
+            return try {
+                youtubeiRepository.resolve(
+                    request = request.copy(authState = resolvedAuthState),
+                    priority = priority,
+                )
+            } catch (failure: YoutubeiException) {
+                // YouTube gave nothing: fall back to JioSaavn before surfacing
+                // a "no stream" error. Rethrow the original on any miss so the
+                // UI keeps showing the accurate YouTube error.
+                val fallback =
+                    if (!request.title.isNullOrBlank()) {
+                        jioSaavnClient.resolveStreamUrl(request.title, request.artist)
+                    } else {
+                        null
+                    } ?: throw failure
+                Timber.tag(TAG).i(
+                    "JioSaavn fallback serving ${request.mediaId} as ${fallback.title}",
+                )
+                ResolvedAudioStream(
+                    url = fallback.url,
+                    requestHeaders = emptyMap(),
+                    formatId = -1,
+                    mimeType = "audio/mpeg",
+                    codecs = "",
+                    bitrate = 320_000,
+                    sampleRate = 44_100,
+                    contentLength = -1L,
+                    expiresAtMs = System.currentTimeMillis() + FALLBACK_URL_TTL_MS,
+                    authFingerprint = request.authState.streamCacheFingerprint,
+                    source = StreamSource.JIOSAAVN,
+                    title = fallback.title,
+                    durationSeconds = fallback.durationSeconds,
+                )
+            }
         }
 
         private fun AudioStreamRequest.resolutionPriority(
@@ -404,5 +437,6 @@ class ResolveAudioStreamUseCase
             const val TAG = "AudioStreamResolver"
             const val STREAM_EXPIRY_SAFETY_MS = 60_000L
             const val MAX_CACHE_ENTRIES = 256
+            const val FALLBACK_URL_TTL_MS = 6 * 60 * 60 * 1_000L
         }
     }

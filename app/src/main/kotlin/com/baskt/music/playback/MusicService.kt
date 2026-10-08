@@ -7632,6 +7632,9 @@ class MusicService :
                             purpose = StreamPurpose.PLAYBACK,
                             authState = YouTube.currentPlaybackAuthState(),
                             pinnedFormatId = pinnedFormatId,
+                            // Snapshot for the JioSaavn fallback if YouTube fails.
+                            title = currentMediaMetadata.value?.takeIf { it.id == mediaId }?.title,
+                            artist = currentMediaMetadata.value?.takeIf { it.id == mediaId }?.artists?.firstOrNull()?.name,
                         ),
                     ).also { resolved ->
                         resolvedRequestHeaders = resolved.requestHeaders

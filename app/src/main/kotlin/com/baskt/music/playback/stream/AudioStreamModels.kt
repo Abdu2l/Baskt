@@ -17,6 +17,7 @@ enum class StreamPurpose {
 
 enum class StreamSource {
     YOUTUBEI,
+    JIOSAAVN,
 }
 
 data class AudioStreamRequest(
@@ -28,6 +29,10 @@ data class AudioStreamRequest(
     val authState: PlaybackAuthState,
     val pinnedFormatId: Int? = null,
     val requiresSongMetadata: Boolean = false,
+    /** Song title, used only for the JioSaavn fallback when YouTube fails. */
+    val title: String? = null,
+    /** Song artist, used only for the JioSaavn fallback when YouTube fails. */
+    val artist: String? = null,
 )
 
 data class ResolvedAudioStream(

@@ -27,6 +27,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,6 +74,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -674,11 +676,12 @@ private fun VisualizerBackground(
             val raw = (magnitudes.getOrElse(0) { 0.15f } + magnitudes.getOrElse(1) { 0.15f }) / 2f
             0.15f + (raw - 0.15f) * energy
         }
-    // Two huge gradient washes rotating against each other over ~35s, like
-    // Apple's flowing backdrop. Audio only breathes their intensity.
+    // Slow orbital drift so the backdrop stays liquid even when paused.
     val spin = rememberInfiniteTransition(label = "visualizer-spin")
-    val angleA by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(35000, easing = LinearEasing)), label = "spinA")
-    val angleB by spin.animateFloat(360f, 0f, infiniteRepeatable(tween(45000, easing = LinearEasing)), label = "spinB")
+    val driftX1 by spin.animateFloat(-1f, 1f, infiniteRepeatable(tween(28000, easing = LinearEasing)), label = "driftX1")
+    val driftY1 by spin.animateFloat(1f, -1f, infiniteRepeatable(tween(34000, easing = LinearEasing)), label = "driftY1")
+    val driftX2 by spin.animateFloat(1f, -1f, infiniteRepeatable(tween(31000, easing = LinearEasing)), label = "driftX2")
+    val driftY2 by spin.animateFloat(-1f, 1f, infiniteRepeatable(tween(25000, easing = LinearEasing)), label = "driftY2")
 
     val palette = remember(gradientColors) {
         if (gradientColors.size >= 3) {
@@ -717,7 +720,11 @@ private fun VisualizerBackground(
             )
         }
 
-    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        val density = LocalDensity.current
+        val base = remember(density, maxWidth, maxHeight) {
+            with(density) { minOf(maxWidth, maxHeight).toPx() }
+        }
         // Blurred artwork base, gently larger than the screen.
         AsyncImage(
             model = artworkUrl,
@@ -731,34 +738,36 @@ private fun VisualizerBackground(
                         scaleY = 1.25f
                     }
                     .blur(46.dp)
-                    .alpha(0.62f),
+                    .alpha(0.60f),
         )
-        // Wash A sweeps one way...
+        // Corner-free radial washes drifting against each other: no edges,
+        // no triangles, just liquid color. Audio only breathes intensity.
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = 1.9f
-                        scaleY = 1.9f
-                        rotationZ = angleA
+                        translationX = driftX1 * base * 0.06f
+                        translationY = driftY1 * base * 0.06f
+                        scaleX = 1.35f + 0.25f * bass
+                        scaleY = 1.35f + 0.25f * bass
                     }
-                    .blur(70.dp)
-                    .alpha(0.50f + 0.14f * bass)
+                    .blur(90.dp)
+                    .alpha(0.55f + 0.15f * bass)
                     .background(washA),
         )
-        // ...wash B sweeps back the other way.
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .graphicsLayer {
-                        scaleX = 1.9f
-                        scaleY = 1.9f
-                        rotationZ = angleB
+                        translationX = driftX2 * base * 0.06f
+                        translationY = driftY2 * base * 0.06f
+                        scaleX = 1.45f + 0.20f * (1f - bass)
+                        scaleY = 1.45f + 0.20f * (1f - bass)
                     }
-                    .blur(70.dp)
-                    .alpha(0.42f + 0.12f * bass)
+                    .blur(90.dp)
+                    .alpha(0.45f + 0.12f * bass)
                     .background(washB),
         )
         Box(

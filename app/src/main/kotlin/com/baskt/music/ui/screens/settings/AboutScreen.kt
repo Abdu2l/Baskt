@@ -690,68 +690,10 @@ private fun AboutSuccessContent(
             }
         }
 
-        item(key = "inspiration", contentType = "about_inspiration") {
+        item(key = "made_by", contentType = "about_team_section") {
             AboutContentContainer {
-                AboutInspirationCard(
+                AboutMadeByCard(
                     onOpenUri = onOpenUri,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        item(key = "project_information", contentType = "about_actions") {
-            AboutContentContainer {
-                AboutProjectInformationSection(
-                    onOpenTranslationContributors = onOpenTranslationContributors,
-                    onOpenDependencyLicenses = onOpenDependencyLicenses,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        item(key = "lead_developer", contentType = "about_team_section") {
-            AboutContentContainer {
-                TeamMemberSection(
-                    title = stringResource(R.string.about_lead_developer),
-                    members = leadDevelopers,
-                    onOpenUri = onOpenUri,
-                    prominentFirstItem = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        if (model.collaborators.size > 0) {
-            item(key = "team", contentType = "about_team_section") {
-                AboutContentContainer {
-                    TeamMemberSection(
-                        title = stringResource(R.string.about_baskt_team),
-                        members = model.collaborators,
-                        onOpenUri = onOpenUri,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-        }
-
-        item(key = "respecters", contentType = "about_team_section") {
-            AboutContentContainer {
-                TeamMemberSection(
-                    title = stringResource(R.string.about_respecter),
-                    members = model.respecters,
-                    onOpenUri = onOpenUri,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        item(key = "contributors", contentType = "about_contributors") {
-            AboutContentContainer {
-                ContributorsSection(
-                    state = model.contributorsState,
-                    readMoreUrl = model.contributorsReadMoreUrl,
-                    onOpenProfile = onOpenUri,
-                    onRetry = onRetryContributors,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -838,6 +780,84 @@ private fun AboutIdentityCard(
                         links = model.primaryLinks,
                         onOpenUri = onOpenUri,
                         horizontalArrangement = Arrangement.spacedBy(AboutSpacing.xs, Alignment.CenterHorizontally),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutMadeByCard(
+    onOpenUri: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier,
+        shape = MaterialTheme.shapes.extraLarge,
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(AboutSpacing.md),
+            horizontalArrangement = Arrangement.spacedBy(AboutSpacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AsyncImage(
+                model = "https://github.com/Abdu2l.png",
+                contentDescription = "Abdu2l",
+                modifier =
+                    Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(AboutSpacing.xs),
+            ) {
+                Text(
+                    text = stringResource(R.string.about_made_by_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = "Abdu2l",
+                    style = MaterialTheme.typography.titleLargeEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(AboutSpacing.xs),
+                ) {
+                    AssistChip(
+                        onClick = { onOpenUri("https://github.com/Abdu2l") },
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.github),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        label = { Text(text = "GitHub") },
+                    )
+                    AssistChip(
+                        onClick = { onOpenUri("https://instagram.com/khhezer") },
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.instagram),
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        },
+                        label = { Text(text = "Instagram") },
                     )
                 }
             }
