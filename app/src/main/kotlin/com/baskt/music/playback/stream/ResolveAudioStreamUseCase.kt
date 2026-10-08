@@ -21,8 +21,10 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.guava.future
 import com.baskt.music.jiosaavn.JioSaavnClient
 import com.baskt.music.morideobfuscator.youtubei.YoutubeiException
+import com.baskt.music.tidal.TidalClient
 import com.baskt.music.utils.YTPlayerUtils
 import timber.log.Timber
+import java.io.IOException
 import java.io.InterruptedIOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ExecutionException
@@ -36,6 +38,7 @@ class ResolveAudioStreamUseCase
     constructor(
         private val youtubeiRepository: YoutubeiStreamRepository,
         private val jioSaavnClient: JioSaavnClient,
+        private val tidalClient: TidalClient,
     ) {
         private data class CacheKey(
             val mediaId: String,
@@ -318,6 +321,25 @@ class ResolveAudioStreamUseCase
             request: AudioStreamRequest,
             priority: StreamResolutionPriority,
         ): ResolvedAudioStream {
+            // Direct source ids never touch YouTube.
+            jioSaavnDirectUrl(request)
+                ?.let {
+                    return jioSaavnStream(
+                        url = it,
+                        request = request,
+                        title = request.title,
+                        durationSeconds = null,
+                    )
+                }
+            tidalDirectUrl(request)
+                ?.let {
+                    return tidalStream(
+                        url = it,
+                        request = request,
+                        title = request.title,
+                        durationSeconds = null,
+                    )
+                }
             val resolvedAuthState =
                 if (request.authState.hasLoginCookie) {
                     YTPlayerUtils.ensureYoutubeiPoTokensForPlayback(
@@ -333,35 +355,96 @@ class ResolveAudioStreamUseCase
                     priority = priority,
                 )
             } catch (failure: YoutubeiException) {
-                // YouTube gave nothing: fall back to JioSaavn before surfacing
-                // a "no stream" error. Rethrow the original on any miss so the
-                // UI keeps showing the accurate YouTube error.
-                val fallback =
-                    if (!request.title.isNullOrBlank()) {
-                        jioSaavnClient.resolveStreamUrl(request.title, request.artist)
-                    } else {
-                        null
-                    } ?: throw failure
-                Timber.tag(TAG).i(
-                    "JioSaavn fallback serving ${request.mediaId} as ${fallback.title}",
-                )
-                ResolvedAudioStream(
-                    url = fallback.url,
-                    requestHeaders = emptyMap(),
-                    formatId = -1,
-                    mimeType = "audio/mpeg",
-                    codecs = "",
-                    bitrate = 320_000,
-                    sampleRate = 44_100,
-                    contentLength = -1L,
-                    expiresAtMs = System.currentTimeMillis() + FALLBACK_URL_TTL_MS,
-                    authFingerprint = request.authState.streamCacheFingerprint,
-                    source = StreamSource.JIOSAAVN,
-                    title = fallback.title,
-                    durationSeconds = fallback.durationSeconds,
-                )
+                // Source chain: YouTube -> TIDAL -> JioSaavn. Only surface the
+                // "no stream" error when every source misses.
+                val title = request.title
+                if (!title.isNullOrBlank()) {
+                    tidalClient.resolveStreamUrl(title, request.artist)?.let { url ->
+                        Timber.tag(TAG).i("TIDAL serving ${request.mediaId}")
+                        return tidalStream(
+                            url = url,
+                            request = request,
+                            title = title,
+                            durationSeconds = null,
+                        )
+                    }
+                    jioSaavnClient.resolveStreamUrl(title, request.artist)?.let { fallback ->
+                        Timber.tag(TAG).i(
+                            "JioSaavn fallback serving ${request.mediaId} as ${fallback.title}",
+                        )
+                        return jioSaavnStream(
+                            url = fallback.url,
+                            request = request,
+                            title = fallback.title,
+                            durationSeconds = fallback.durationSeconds,
+                        )
+                    }
+                }
+                throw failure
             }
         }
+
+        private suspend fun jioSaavnDirectUrl(request: AudioStreamRequest): String? {
+            val id =
+                request.mediaId
+                    .removePrefix(JioSaavnClient.ID_PREFIX)
+                    .takeIf { it != request.mediaId }
+                    ?: return null
+            return jioSaavnClient.streamUrlById(id)
+        }
+
+        private suspend fun tidalDirectUrl(request: AudioStreamRequest): String? {
+            val id =
+                request.mediaId
+                    .removePrefix(TidalClient.ID_PREFIX)
+                    .takeIf { it != request.mediaId }
+                    ?: return null
+            return tidalClient.streamUrlById(id)
+        }
+
+        private fun tidalStream(
+            url: String,
+            request: AudioStreamRequest,
+            title: String?,
+            durationSeconds: Int?,
+        ): ResolvedAudioStream =
+            ResolvedAudioStream(
+                url = url,
+                requestHeaders = emptyMap(),
+                formatId = -2,
+                mimeType = "audio/flac",
+                codecs = "",
+                bitrate = 1411_000,
+                sampleRate = 44_100,
+                contentLength = -1L,
+                expiresAtMs = System.currentTimeMillis() + FALLBACK_URL_TTL_MS,
+                authFingerprint = request.authState.streamCacheFingerprint,
+                source = StreamSource.TIDAL,
+                title = title,
+                durationSeconds = durationSeconds,
+            )
+
+        private fun jioSaavnStream(
+            url: String,
+            request: AudioStreamRequest,
+            title: String?,
+            durationSeconds: Int?,
+        ): ResolvedAudioStream =
+            ResolvedAudioStream(
+                url = url,
+                requestHeaders = emptyMap(),
+                formatId = -1,
+                mimeType = "audio/mpeg",
+                codecs = "",
+                bitrate = 320_000,
+                sampleRate = 44_100,
+                contentLength = -1L,
+                expiresAtMs = System.currentTimeMillis() + FALLBACK_URL_TTL_MS,
+                authFingerprint = request.authState.streamCacheFingerprint,
+                source = StreamSource.JIOSAAVN,
+                title = title,
+                durationSeconds = durationSeconds,
+            )
 
         private fun AudioStreamRequest.resolutionPriority(
             consumer: ResolutionConsumer,

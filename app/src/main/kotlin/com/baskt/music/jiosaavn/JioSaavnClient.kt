@@ -27,6 +27,15 @@ data class JioSaavnStream(
     val durationSeconds: Int?,
 )
 
+data class SaavnTrack(
+    val id: String,
+    val title: String,
+    val artists: String,
+    val image: String,
+    val durationSeconds: Int?,
+    val album: String?,
+)
+
 @Singleton
 class JioSaavnClient
     @Inject
@@ -56,8 +65,11 @@ class JioSaavnClient
                         add(cleanTitle)
                     }
                 for (query in queries) {
-                    val hit = searchFirst(query, cleanTitle, artist) ?: continue
-                    val stream = streamUrlFor(hit) ?: continue
+                    val hits = searchTracks(query, limit = 5)
+                    val hit = hits.maxByOrNull { scoreOf(it, cleanTitle, artist) }
+                        ?.takeIf { scoreOf(it, cleanTitle, artist) > SCORE_FLOOR }
+                        ?: continue
+                    val stream = streamUrlById(hit.id) ?: continue
                     return JioSaavnStream(
                         url = stream,
                         title = hit.title,
@@ -70,76 +82,95 @@ class JioSaavnClient
                 null
             }
 
-        private data class Hit(
-            val id: String,
-            val title: String,
-            val artists: String,
-            val durationSeconds: Int?,
-            val directEncryptedUrl: String?,
-        )
-
-        private suspend fun searchFirst(
+        /** Raw track search for UI lists. Never throws. */
+        suspend fun searchTracks(
             query: String,
+            limit: Int = 8,
+        ): List<SaavnTrack> =
+            runCatching {
+                val text =
+                    get(
+                        call = "search.getResults",
+                        params = mapOf("q" to query, "p" to "1", "n" to limit.coerceIn(1, 20).toString()),
+                    ) ?: return emptyList()
+                val root = JSONObject(text)
+                val results = root.optJSONArray("results") ?: return emptyList()
+                buildList {
+                    for (i in 0 until results.length()) {
+                        val item = results.optJSONObject(i) ?: continue
+                        if (item.optString("type") !in setOf("song", "")) continue
+                        val info = item.optJSONObject("more_info") ?: JSONObject()
+                        val artists =
+                            info.optString("primary_artists").ifBlank { info.optString("singers") }
+                        add(
+                            SaavnTrack(
+                                id = item.optString("id"),
+                                title = item.optString("title"),
+                                artists = artists,
+                                image = upscaleImage(item.optString("image")),
+                                durationSeconds = info.optString("duration").toIntOrNull(),
+                                album = info.optString("album").ifBlank { null },
+                            ),
+                        )
+                    }
+                }.filter { it.id.isNotBlank() && it.title.isNotBlank() }
+            }.getOrElse { failure ->
+                Timber.tag(TAG).w(failure, "JioSaavn search failed for $query")
+                emptyList()
+            }
+
+        /** Direct stream URL for a known JioSaavn song id. Never throws. */
+        suspend fun streamUrlById(id: String): String? =
+            runCatching {
+                val text =
+                    get(
+                        call = "song.getDetails",
+                        params = mapOf("pids" to id),
+                    ) ?: return null
+                val songs = JSONObject(text).optJSONArray("songs") ?: return null
+                for (i in 0 until songs.length()) {
+                    val info = songs.optJSONObject(i)?.optJSONObject("more_info") ?: continue
+                    val encrypted = info.optString("encrypted_media_url")
+                    if (encrypted.isNotBlank()) {
+                        decryptTo320(encrypted)?.let { return it }
+                    }
+                }
+                null
+            }.getOrElse { failure ->
+                Timber.tag(TAG).w(failure, "JioSaavn details failed for $id")
+                null
+            }
+
+        private fun scoreOf(
+            track: SaavnTrack,
             wantTitle: String,
             wantArtist: String?,
-        ): Hit? {
-            val text =
-                get(
-                    call = "search.getResults",
-                    params = mapOf("q" to query, "p" to "1", "n" to "10"),
-                ) ?: return null
-            val root = runCatching { JSONObject(text) }.getOrNull() ?: return null
-            val results = root.optJSONArray("results") ?: return null
-            var best: Hit? = null
-            var bestScore = Int.MIN_VALUE
-            for (i in 0 until results.length()) {
-                val item = results.optJSONObject(i) ?: continue
-                if (item.optString("type") !in setOf("song", "")) continue
-                val hit = parseHit(item) ?: continue
-                val score = score(hit, wantTitle, wantArtist)
-                if (score > bestScore) {
-                    bestScore = score
-                    best = hit
+        ): Int {
+            val t = norm(track.title)
+            val w = norm(wantTitle)
+            if (t.isEmpty() || w.isEmpty()) return Int.MIN_VALUE
+            var s = 0
+            if (t == w) {
+                s += 100
+            } else if (t.contains(w) || w.contains(t)) {
+                s += 60
+            } else {
+                s -= levenshtein(t, w).coerceAtMost(40)
+            }
+            if (!wantArtist.isNullOrBlank()) {
+                val a = norm(track.artists)
+                val wa = norm(wantArtist)
+                if (wa.isNotEmpty() && (a.contains(wa) || wa.split(" ").any { it.length > 3 && a.contains(it) })) {
+                    s += 40
                 }
             }
-            return best?.takeIf { bestScore > SCORE_FLOOR }
+            return s
         }
 
-        private fun parseHit(item: JSONObject): Hit? {
-            val id = item.optString("id").ifBlank { return null }
-            val info = item.optJSONObject("more_info") ?: JSONObject()
-            val artists =
-                info.optString("primary_artists").ifBlank { info.optString("singers") }
-            return Hit(
-                id = id,
-                title = item.optString("title"),
-                artists = artists,
-                durationSeconds = info.optString("duration").toIntOrNull(),
-                directEncryptedUrl = info.optString("encrypted_media_url").ifBlank { null },
-            )
-        }
-
-        private suspend fun streamUrlFor(hit: Hit): String? {
-            // Search hits sometimes already carry the encrypted URL; otherwise
-            // fetch full details for the id.
-            hit.directEncryptedUrl?.let { decryptTo320(it)?.let { return it } }
-            val text =
-                get(
-                    call = "song.getDetails",
-                    params = mapOf("pids" to hit.id),
-                ) ?: return null
-            val songs =
-                runCatching { JSONObject(text).optJSONArray("songs") } .getOrNull()
-                    ?: return null
-            for (i in 0 until songs.length()) {
-                val info = songs.optJSONObject(i)?.optJSONObject("more_info") ?: continue
-                val encrypted = info.optString("encrypted_media_url")
-                if (encrypted.isNotBlank()) {
-                    decryptTo320(encrypted)?.let { return it }
-                }
-            }
-            return null
-        }
+        private fun upscaleImage(url: String): String =
+            url
+                .replace(Regex("150x150|50x50"), "500x500")
+                .replace(Regex("^http://"), "https://")
 
         private suspend fun get(
             call: String,
@@ -160,32 +191,6 @@ class JioSaavnClient
                 Timber.tag(TAG).w(failure, "JioSaavn api $call failed")
                 null
             }
-
-        private fun score(
-            hit: Hit,
-            wantTitle: String,
-            wantArtist: String?,
-        ): Int {
-            val t = norm(hit.title)
-            val w = norm(wantTitle)
-            if (t.isEmpty() || w.isEmpty()) return Int.MIN_VALUE
-            var s = 0
-            if (t == w) {
-                s += 100
-            } else if (t.contains(w) || w.contains(t)) {
-                s += 60
-            } else {
-                s -= levenshtein(t, w).coerceAtMost(40)
-            }
-            if (!wantArtist.isNullOrBlank()) {
-                val a = norm(hit.artists)
-                val wa = norm(wantArtist)
-                if (wa.isNotEmpty() && (a.contains(wa) || wa.split(" ").any { it.length > 3 && a.contains(it) })) {
-                    s += 40
-                }
-            }
-            return s
-        }
 
         private fun norm(s: String): String = s.lowercase().replace(Regex("[^a-z0-9 ]"), " ").replace(Regex("\\s+"), " ").trim()
 
@@ -209,6 +214,8 @@ class JioSaavnClient
 
         companion object {
             private const val TAG = "JioSaavn"
+            /** MediaId prefix marking JioSaavn-direct tracks. */
+            const val ID_PREFIX = "jiosaavn:"
             private const val API_URL = "https://www.jiosaavn.com/api.php"
             private const val USER_AGENT =
                 "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"

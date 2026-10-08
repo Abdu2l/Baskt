@@ -18,6 +18,7 @@ enum class StreamPurpose {
 enum class StreamSource {
     YOUTUBEI,
     JIOSAAVN,
+    TIDAL,
 }
 
 data class AudioStreamRequest(

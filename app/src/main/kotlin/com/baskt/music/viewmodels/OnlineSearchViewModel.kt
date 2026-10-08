@@ -31,10 +31,16 @@ import com.baskt.music.innertube.YouTube.SearchFilter.Companion.FILTER_FEATURED_
 import com.baskt.music.innertube.YouTube.SearchFilter.Companion.FILTER_PODCAST
 import com.baskt.music.innertube.YouTube.SearchFilter.Companion.FILTER_SONG
 import com.baskt.music.innertube.YouTube.SearchFilter.Companion.FILTER_VIDEO
+import com.baskt.music.innertube.models.Album
+import com.baskt.music.innertube.models.Artist
 import com.baskt.music.innertube.models.SongItem
 import com.baskt.music.innertube.models.YTItem
 import com.baskt.music.innertube.models.filterExplicit
 import com.baskt.music.innertube.models.filterVideo
+import com.baskt.music.jiosaavn.JioSaavnClient
+import com.baskt.music.jiosaavn.SaavnTrack
+import com.baskt.music.tidal.TidalClient
+import com.baskt.music.tidal.TidalTrack
 import com.baskt.music.innertube.pages.SearchSummaryPage
 import com.baskt.music.models.ItemsPage
 import com.baskt.music.ui.screens.search.OnlineSearchResultArgument
@@ -57,6 +63,8 @@ class OnlineSearchViewModel
         savedStateHandle: SavedStateHandle,
         private val loadAiContentFilterPolicy: LoadAiContentFilterPolicyUseCase,
         private val filterAiContent: FilterAiContentUseCase,
+        private val jioSaavnClient: JioSaavnClient,
+        private val tidalClient: TidalClient,
     ) : ViewModel() {
         val query =
             decodeOnlineSearchQuery(
@@ -133,6 +141,36 @@ class OnlineSearchViewModel
             if (viewStateMap.containsKey(filterKey) || !loadingFilters.add(filterKey)) return
 
             try {
+                // Song search is YouTube-free: TIDAL + JioSaavn only.
+                if (filter == FILTER_SONG) {
+                    val aiContentFilterPolicy = loadAiContentFilterPolicy()
+                    val tracks =
+                        runCatching {
+                            val saavn =
+                                jioSaavnClient.searchTracks(query, limit = 8)
+                                    .map { it.toSongItem() }
+                            val tidal =
+                                tidalClient.searchTracks(query, limit = 8)
+                                    .map { it.toSongItem() }
+                            saavn + tidal
+                        }.getOrDefault(emptyList())
+                    viewStateMap[filterKey] =
+                        ItemsPage(
+                            filterAiContent(
+                                tracks
+                                    .distinctBy { it.id }
+                                    .filterExplicit(
+                                        context.dataStore.get(
+                                            HideExplicitKey,
+                                            false,
+                                        ),
+                                    ).filterVideo(context.dataStore.get(HideVideoKey, false)),
+                                aiContentFilterPolicy,
+                            ),
+                            null,
+                        )
+                    return
+                }
                 YouTube
                     .search(query, filter)
                     .onSuccess { result ->
@@ -159,6 +197,39 @@ class OnlineSearchViewModel
                 loadingFilters.remove(filterKey)
             }
         }
+
+        private fun SaavnTrack.toSongItem(): SongItem {
+            val decodedTitle =
+                android.text.Html.fromHtml(title, android.text.Html.FROM_HTML_MODE_LEGACY).toString()
+            return SongItem(
+                id = JioSaavnClient.ID_PREFIX + id,
+                title = decodedTitle,
+                artists =
+                    artists.split(",").map { name ->
+                        Artist(name = name.trim(), id = null)
+                    }.filter { it.name.isNotBlank() },
+                album = album?.let { Album(name = it, id = "") },
+                duration = durationSeconds,
+                thumbnail = image,
+                explicit = false,
+                endpoint = null,
+            )
+        }
+
+        private fun TidalTrack.toSongItem(): SongItem =
+            SongItem(
+                id = TidalClient.ID_PREFIX + id,
+                title = title,
+                artists =
+                    artists.split(",").map { name ->
+                        Artist(name = name.trim(), id = null)
+                    }.filter { it.name.isNotBlank() },
+                album = null,
+                duration = durationSeconds,
+                thumbnail = image,
+                explicit = false,
+                endpoint = null,
+            )
 
         fun loadMore() {
             val filter = filter.value?.value
