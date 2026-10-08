@@ -19,6 +19,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -58,8 +59,10 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,8 +70,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -109,6 +114,7 @@ import com.baskt.music.LocalPlayerConnection
 import com.baskt.music.R
 import com.baskt.music.constants.BlurRadiusKey
 import com.baskt.music.playback.VisualizerState
+import kotlin.math.sqrt
 import com.baskt.music.constants.DisableBlurKey
 import com.baskt.music.constants.EnableHapticFeedbackKey
 import com.baskt.music.constants.LyricsBackgroundStyle
@@ -562,6 +568,14 @@ private fun LyricsScreenBackground(
                 )
             }
 
+            LyricsBackgroundStyle.ENERGETIC -> {
+                EnergeticBackground(
+                    artworkUrl = mediaMetadata.thumbnailUrl,
+                    gradientColors = gradientColors,
+                    isPlaying = isPlaying,
+                )
+            }
+
             LyricsBackgroundStyle.COLORING,
             LyricsBackgroundStyle.CUSTOM,
             -> {
@@ -782,6 +796,197 @@ private fun VisualizerBackground(
                     .fillMaxSize()
                     .background(scrim),
         )
+    }
+}
+
+@Composable
+private fun EnergeticBackground(
+    artworkUrl: String?,
+    gradientColors: List<Color>,
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    // Port of monochrome.tf's Particles preset: a drifting plexus network.
+    // Speed, size, alpha and link distance ride the music's intensity + kick.
+    val magnitudes by VisualizerState.magnitudes.collectAsStateWithLifecycle()
+    val energy by animateFloatAsState(
+        targetValue = if (isPlaying) 1f else 0f,
+        animationSpec = tween(900),
+        label = "energetic-energy",
+    )
+
+    val particleColor =
+        remember(gradientColors) {
+            val all = gradientColors.ifEmpty { AppleMusicFallbackGradient }
+            all.maxByOrNull {
+                0.299f * it.red + 0.587f * it.green + 0.114f * it.blue
+            } ?: Color.White
+        }
+    val scrim =
+        remember {
+            Brush.verticalGradient(
+                listOf(
+                    Color.Black.copy(alpha = 0.55f),
+                    Color.Transparent,
+                    Color.Transparent,
+                    Color.Black.copy(alpha = 0.65f),
+                ),
+            )
+        }
+
+    var frame by remember { mutableIntStateOf(0) }
+    val sim =
+        remember {
+            ParticleSim(count = 140)
+        }
+    LaunchedEffect(isPlaying) {
+        var lastNanos = 0L
+        while (true) {
+            withFrameNanos { now ->
+                val dt = if (lastNanos == 0L) 1f / 60f else ((now - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
+                lastNanos = now
+                sim.step(
+                    magnitudes = magnitudes,
+                    energy = energy,
+                    dt = dt,
+                    running = isPlaying,
+                )
+                frame++
+            }
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
+        AsyncImage(
+            model = artworkUrl,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.2f
+                        scaleY = 1.2f
+                    }
+                    .blur(50.dp)
+                    .alpha(0.30f),
+        )
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            sim.draw(
+                drawScope = this,
+                color = particleColor,
+            )
+        }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(scrim),
+        )
+    }
+}
+
+private class ParticleSim(val count: Int) {
+    val x = FloatArray(count)
+    val y = FloatArray(count)
+    val vx = FloatArray(count)
+    val vy = FloatArray(count)
+    val size = FloatArray(count)
+    var kick = 0f
+    var intensity = 0f
+    private var bassAvg = 0.15f
+    private var initW = 0f
+    private var initH = 0f
+    private var lastDt = 1f / 60f
+    private var lastRunning = true
+
+    /** Called every frame: eases kick + intensity toward the audio. */
+    fun step(
+        magnitudes: FloatArray,
+        energy: Float,
+        dt: Float,
+        running: Boolean,
+    ) {
+        val bass = magnitudes.getOrElse(0) { 0.15f }
+        var sum = 0f
+        for (m in magnitudes) sum += m
+        val mean = if (magnitudes.isNotEmpty()) sum / magnitudes.size else 0.15f
+        bassAvg += (bass - bassAvg) * 0.06f
+        val rawKick = ((bass - bassAvg * 1.35f) * energy).coerceIn(0f, 1f)
+        kick += (rawKick - kick) * 0.45f
+        val targetIntensity = mean * energy
+        intensity += (targetIntensity - intensity) * 0.12f
+        lastDt = dt
+        lastRunning = running
+    }
+
+    fun draw(
+        drawScope: DrawScope,
+        color: Color,
+    ) {
+        val w = drawScope.size.width
+        val h = drawScope.size.height
+        if (w <= 0f || h <= 0f) return
+        if (initW != w || initH != h) {
+            for (i in 0 until count) {
+                x[i] = Math.random().toFloat() * w
+                y[i] = Math.random().toFloat() * h
+                vx[i] = (Math.random().toFloat() - 0.5f) * 2f
+                vy[i] = (Math.random().toFloat() - 0.5f) * 2f
+                size[i] = Math.random().toFloat() * 3f + 1f
+            }
+            initW = w
+            initH = h
+        }
+        val stepScale = (lastDt * 60f).coerceIn(0f, 3f)
+        val speedMult =
+            (1f + intensity * 2f + kick * 8f) * stepScale * if (lastRunning) 1f else 0.15f
+        for (i in 0 until count) {
+            x[i] += vx[i] * speedMult
+            y[i] += vy[i] * speedMult
+            if (kick > 0.3f && lastRunning) {
+                x[i] += (Math.random().toFloat() - 0.5f) * kick * 2f
+                y[i] += (Math.random().toFloat() - 0.5f) * kick * 2f
+            }
+            if (x[i] < 0f) x[i] = w
+            if (x[i] > w) x[i] = 0f
+            if (y[i] < 0f) y[i] = h
+            if (y[i] > h) y[i] = 0f
+        }
+        val kickNow = kick
+        val intensityNow = intensity
+        val maxDist = 150f + intensityNow * 50f + kickNow * 50f
+        val maxDistSq = maxDist * maxDist
+        val dotAlpha = (0.4f + intensityNow * 0.2f + kickNow * 0.15f).coerceIn(0f, 1f)
+        for (i in 0 until count) {
+            val r = size[i] * (1f + intensityNow * 0.5f + kickNow * 0.8f)
+            drawScope.drawCircle(
+                color = color,
+                radius = r,
+                center = Offset(x[i], y[i]),
+                alpha = dotAlpha,
+            )
+        }
+        for (i in 0 until count) {
+            for (j in i + 1 until count) {
+                val dx = x[i] - x[j]
+                if (dx > maxDist || dx < -maxDist) continue
+                val dy = y[i] - y[j]
+                if (dy > maxDist || dy < -maxDist) continue
+                val distSq = dx * dx + dy * dy
+                if (distSq < maxDistSq) {
+                    val dist = sqrt(distSq)
+                    val f = 1f - dist / maxDist
+                    drawScope.drawLine(
+                        color = color,
+                        start = Offset(x[i], y[i]),
+                        end = Offset(x[j], y[j]),
+                        strokeWidth = f * (1f + kickNow * 1.5f),
+                        alpha = (f * (0.3f + intensityNow * 0.2f + kickNow * 0.3f)).coerceIn(0f, 1f),
+                    )
+                }
+            }
+        }
     }
 }
 

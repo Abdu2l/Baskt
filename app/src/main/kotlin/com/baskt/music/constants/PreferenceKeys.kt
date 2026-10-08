@@ -686,7 +686,8 @@ enum class LyricsBackgroundStyle {
     FOLLOW_THEME,
     COLORING,
     CUSTOM,
-    VISUALIZER;
+    VISUALIZER,
+    ENERGETIC;
 
     fun resolveFor(playerBackgroundStyle: PlayerBackgroundStyle): LyricsBackgroundStyle =
         when {
