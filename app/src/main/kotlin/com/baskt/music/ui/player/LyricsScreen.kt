@@ -10,6 +10,8 @@
 package com.baskt.music.ui.player
 
 import android.content.res.Configuration
+import android.graphics.RuntimeShader
+import android.os.Build
 import android.view.HapticFeedbackConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -59,8 +61,9 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
@@ -70,11 +73,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import coil3.request.SuccessResult
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -114,7 +121,6 @@ import com.baskt.music.LocalPlayerConnection
 import com.baskt.music.R
 import com.baskt.music.constants.BlurRadiusKey
 import com.baskt.music.playback.VisualizerState
-import kotlin.math.sqrt
 import com.baskt.music.constants.DisableBlurKey
 import com.baskt.music.constants.EnableHapticFeedbackKey
 import com.baskt.music.constants.LyricsBackgroundStyle
@@ -806,75 +812,76 @@ private fun EnergeticBackground(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    // Port of monochrome.tf's Particles preset: a drifting plexus network.
-    // Speed, size, alpha and link distance ride the music's intensity + kick.
+    // Cover-warping shader look (monochrome.tf style): the artwork itself
+    // flows like liquid and breathes with the kick. Pre-Android 13 falls
+    // back to the ambient Flow backdrop.
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        VisualizerBackground(
+            artworkUrl = artworkUrl,
+            gradientColors = gradientColors,
+            isPlaying = isPlaying,
+            modifier = modifier,
+        )
+        return
+    }
+    val context = LocalContext.current
+    var cover by remember(artworkUrl) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(artworkUrl) {
+        cover =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    if (artworkUrl.isNullOrBlank()) {
+                        return@runCatching null
+                    }
+                    val loader = context.applicationContext.imageLoader
+                    val request =
+                        ImageRequest
+                            .Builder(context.applicationContext)
+                            .data(artworkUrl)
+                            .size(256, 256)
+                            .allowHardware(false)
+                            .build()
+                    val result = loader.execute(request)
+                    if (result is SuccessResult) {
+                        result.image.toBitmap().asImageBitmap()
+                    } else {
+                        null
+                    }
+                }.getOrNull()
+            }
+    }
     val magnitudes by VisualizerState.magnitudes.collectAsStateWithLifecycle()
     val energy by animateFloatAsState(
         targetValue = if (isPlaying) 1f else 0f,
         animationSpec = tween(900),
-        label = "energetic-energy",
+        label = "warp-energy",
     )
-
-    val particleColor =
-        remember(gradientColors) {
-            val all = gradientColors.ifEmpty { AppleMusicFallbackGradient }
-            all.maxByOrNull {
-                0.299f * it.red + 0.587f * it.green + 0.114f * it.blue
-            } ?: Color.White
-        }
     val scrim =
         remember {
             Brush.verticalGradient(
                 listOf(
-                    Color.Black.copy(alpha = 0.55f),
+                    Color.Black.copy(alpha = 0.45f),
                     Color.Transparent,
                     Color.Transparent,
-                    Color.Black.copy(alpha = 0.65f),
+                    Color.Black.copy(alpha = 0.60f),
                 ),
             )
         }
-
-    var frame by remember { mutableIntStateOf(0) }
-    val sim =
-        remember {
-            ParticleSim(count = 140)
-        }
-    LaunchedEffect(isPlaying) {
-        var lastNanos = 0L
-        while (true) {
-            withFrameNanos { now ->
-                val dt = if (lastNanos == 0L) 1f / 60f else ((now - lastNanos) / 1_000_000_000f).coerceIn(0f, 0.1f)
-                lastNanos = now
-                sim.step(
-                    magnitudes = magnitudes,
-                    energy = energy,
-                    dt = dt,
-                    running = isPlaying,
-                )
-                frame++
-            }
-        }
-    }
-
+    val bitmap = cover
     Box(modifier = modifier.fillMaxSize().background(Color.Black)) {
-        AsyncImage(
-            model = artworkUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.2f
-                        scaleY = 1.2f
-                    }
-                    .blur(50.dp)
-                    .alpha(0.30f),
-        )
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            sim.draw(
-                drawScope = this,
-                color = particleColor,
+        if (bitmap != null) {
+            WarpCanvas(
+                bitmap = bitmap,
+                magnitudes = magnitudes,
+                energy = energy,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            VisualizerBackground(
+                artworkUrl = artworkUrl,
+                gradientColors = gradientColors,
+                isPlaying = isPlaying,
+                modifier = Modifier.fillMaxSize(),
             )
         }
         Box(
@@ -886,109 +893,99 @@ private fun EnergeticBackground(
     }
 }
 
-private class ParticleSim(val count: Int) {
-    val x = FloatArray(count)
-    val y = FloatArray(count)
-    val vx = FloatArray(count)
-    val vy = FloatArray(count)
-    val size = FloatArray(count)
-    var kick = 0f
-    var intensity = 0f
-    private var bassAvg = 0.15f
-    private var initW = 0f
-    private var initH = 0f
-    private var lastDt = 1f / 60f
-    private var lastRunning = true
-
-    /** Called every frame: eases kick + intensity toward the audio. */
-    fun step(
-        magnitudes: FloatArray,
-        energy: Float,
-        dt: Float,
-        running: Boolean,
-    ) {
-        val bass = magnitudes.getOrElse(0) { 0.15f }
-        var sum = 0f
-        for (m in magnitudes) sum += m
-        val mean = if (magnitudes.isNotEmpty()) sum / magnitudes.size else 0.15f
-        bassAvg += (bass - bassAvg) * 0.06f
-        val rawKick = ((bass - bassAvg * 1.35f) * energy).coerceIn(0f, 1f)
-        kick += (rawKick - kick) * 0.45f
-        val targetIntensity = mean * energy
-        intensity += (targetIntensity - intensity) * 0.12f
-        lastDt = dt
-        lastRunning = running
+@Composable
+private fun WarpCanvas(
+    bitmap: ImageBitmap,
+    magnitudes: FloatArray,
+    energy: Float,
+    modifier: Modifier = Modifier,
+) {
+    val shader = remember(bitmap) { RuntimeShader(WARP_SHADER) }
+    val latestMagnitudes by rememberUpdatedState(magnitudes)
+    var timeSeconds by remember { mutableFloatStateOf(0f) }
+    var beat by remember { mutableFloatStateOf(0f) }
+    var bassAverage by remember { mutableFloatStateOf(0.15f) }
+    LaunchedEffect(Unit) {
+        var startNanos = 0L
+        while (true) {
+            withFrameNanos { now ->
+                if (startNanos == 0L) startNanos = now
+                timeSeconds = (now - startNanos) / 1_000_000_000f
+                val mags = latestMagnitudes
+                val bass = mags.getOrElse(0) { 0.15f }
+                bassAverage += (bass - bassAverage) * 0.06f
+                val rawKick = ((bass - bassAverage * 1.35f) * energy).coerceIn(0f, 1f)
+                beat += (rawKick - beat) * 0.45f
+            }
+        }
     }
-
-    fun draw(
-        drawScope: DrawScope,
-        color: Color,
-    ) {
-        val w = drawScope.size.width
-        val h = drawScope.size.height
-        if (w <= 0f || h <= 0f) return
-        if (initW != w || initH != h) {
-            for (i in 0 until count) {
-                x[i] = Math.random().toFloat() * w
-                y[i] = Math.random().toFloat() * h
-                vx[i] = (Math.random().toFloat() - 0.5f) * 2f
-                vy[i] = (Math.random().toFloat() - 0.5f) * 2f
-                size[i] = Math.random().toFloat() * 3f + 1f
-            }
-            initW = w
-            initH = h
-        }
-        val stepScale = (lastDt * 60f).coerceIn(0f, 3f)
-        val speedMult =
-            (1f + intensity * 2f + kick * 8f) * stepScale * if (lastRunning) 1f else 0.15f
-        for (i in 0 until count) {
-            x[i] += vx[i] * speedMult
-            y[i] += vy[i] * speedMult
-            if (kick > 0.3f && lastRunning) {
-                x[i] += (Math.random().toFloat() - 0.5f) * kick * 2f
-                y[i] += (Math.random().toFloat() - 0.5f) * kick * 2f
-            }
-            if (x[i] < 0f) x[i] = w
-            if (x[i] > w) x[i] = 0f
-            if (y[i] < 0f) y[i] = h
-            if (y[i] > h) y[i] = 0f
-        }
-        val kickNow = kick
-        val intensityNow = intensity
-        val maxDist = 150f + intensityNow * 50f + kickNow * 50f
-        val maxDistSq = maxDist * maxDist
-        val dotAlpha = (0.4f + intensityNow * 0.2f + kickNow * 0.15f).coerceIn(0f, 1f)
-        for (i in 0 until count) {
-            val r = size[i] * (1f + intensityNow * 0.5f + kickNow * 0.8f)
-            drawScope.drawCircle(
-                color = color,
-                radius = r,
-                center = Offset(x[i], y[i]),
-                alpha = dotAlpha,
-            )
-        }
-        for (i in 0 until count) {
-            for (j in i + 1 until count) {
-                val dx = x[i] - x[j]
-                if (dx > maxDist || dx < -maxDist) continue
-                val dy = y[i] - y[j]
-                if (dy > maxDist || dy < -maxDist) continue
-                val distSq = dx * dx + dy * dy
-                if (distSq < maxDistSq) {
-                    val dist = sqrt(distSq)
-                    val f = 1f - dist / maxDist
-                    drawScope.drawLine(
-                        color = color,
-                        start = Offset(x[i], y[i]),
-                        end = Offset(x[j], y[j]),
-                        strokeWidth = f * (1f + kickNow * 1.5f),
-                        alpha = (f * (0.3f + intensityNow * 0.2f + kickNow * 0.3f)).coerceIn(0f, 1f),
-                    )
-                }
-            }
-        }
+    Canvas(modifier = modifier) {
+        shader.setFloatUniform("uRes", size.width, size.height)
+        shader.setFloatUniform("uTime", timeSeconds)
+        shader.setFloatUniform("uBeat", beat)
+        shader.setInputShader(
+            "uTex",
+            ImageShader(bitmap, TileMode.Clamp, TileMode.Clamp),
+        )
+        drawRect(brush = ShaderBrush(shader))
     }
 }
+
+private const val WARP_SHADER = """
+uniform shader uTex;
+uniform float uTime;
+uniform float uBeat;
+uniform float2 uRes;
+
+vec2 warpHash(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453);
+}
+
+float warpNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    float a = dot(warpHash(i), f);
+    float b = dot(warpHash(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0));
+    float c = dot(warpHash(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0));
+    float d = dot(warpHash(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float warpFbm(vec2 p) {
+    float v = 0.0;
+    float amp = 0.5;
+    for (int i = 0; i < 4; i++) {
+        v += amp * warpNoise(p);
+        p *= 2.03;
+        amp *= 0.5;
+    }
+    return v;
+}
+
+half4 main(float2 fragCoord) {
+    vec2 uv = fragCoord / uRes;
+    float t = uTime * 0.05;
+    vec2 q = vec2(
+        warpFbm(uv * 2.0 + t),
+        warpFbm(uv * 2.0 + vec2(5.2, 1.3) - t * 0.8)
+    );
+    vec2 r = vec2(
+        warpFbm(uv * 2.0 + 2.5 * q + vec2(1.7, 9.2) + 0.2 * t + uBeat * 0.25),
+        warpFbm(uv * 2.0 + 2.5 * q + vec2(8.3, 2.8) - 0.15 * t)
+    );
+    float zoom = 1.0 + 0.12 * sin(uTime * 0.15) + uBeat * 0.10;
+    vec2 warpUv = (uv - 0.5) / zoom + 0.5 + 0.18 * (r - 0.5);
+    vec3 col = uTex.eval(warpUv * uRes).rgb;
+    float lum = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(vec3(lum), col, 1.25);
+    float d = distance(uv, vec2(0.5));
+    col *= 1.0 - 0.55 * d * d;
+    return half4(col, 1.0);
+}
+"""
+
 
 @Composable
 private fun AppleMusicGrabber(
